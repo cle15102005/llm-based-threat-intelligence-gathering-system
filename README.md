@@ -5,13 +5,12 @@
 * Git
 
 **1. Install Ollama**
-Ollama is the engine that runs the local AI models.
 * Download and install from https://ollama.com/download
 
 **2. Clone the Repository**
 ```bash
-git clone https://github.com/cle15102005/llm-based-theat-intelligence-gathering-system
-cd threat-intel-system
+git clone https://github.com/cle15102005/llm-based-threat-intelligence-gathering-system
+cd llm-based-threat-intelligence-gathering-system
 ```
 
 **3. Create a Virtual Environment**
