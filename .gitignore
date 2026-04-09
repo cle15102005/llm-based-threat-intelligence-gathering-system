@@ -31,8 +31,7 @@ secrets.json
 # Outputs & Reports
 # =========================
 # Ignore the final generated LLM reports
-reports/
-*.txt
+#reports/*.txt
 
 # =========================
 # IDEs & OS Files
