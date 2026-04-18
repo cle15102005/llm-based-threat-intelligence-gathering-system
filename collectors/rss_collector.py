@@ -6,6 +6,8 @@ from typing import Any
 
 from collectors.base_collector import BaseCollector
 
+from db.queries import insert_raw_item
+
 # Well-known security RSS feeds — extend as needed
 KNOWN_FEEDS: dict[str, str] = {
     "exploitdb":         "https://www.exploit-db.com/rss.xml",
@@ -143,3 +145,38 @@ class RSSCollector(BaseCollector):
             return parsedate_to_datetime(date_str).year
         except Exception:
             return None
+        
+
+#--------------test--------------------------------------
+if __name__ == "__main__":
+    print("[*] Starting test run for RSSCollector...")
+    # Init the collector
+    collector = RSSCollector()
+
+    print("[*] Fetching recent threat reports from the last 30 days...")
+    # Call the function to fetch data (get the most recent 30 days for speed)
+    recent_threats = collector.fetch_by_time(days_back=30)
+
+    print(f"[*] Found {len(recent_threats)} reports. Starting to save to Database...")
+
+    success_count = 0
+    duplicate_count = 0
+
+    # Scan through the fetched reports and save them to the database
+    for threat_data in recent_threats:
+        try:
+            # Call the insert function from db/queries.py to save the data
+            inserted_id = insert_raw_item(threat_data)
+            
+            if inserted_id:
+                print(f"[+] Saved: {threat_data['title']} (ID: {inserted_id})")
+                success_count += 1
+            else:
+                print(f"[-] Ignored duplicate: {threat_data['title']}")
+                duplicate_count += 1
+                
+        except Exception as e:
+            print(f"[!] Error saving article '{threat_data['title']}': {e}")
+
+    print("-" * 60)
+    print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")

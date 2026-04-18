@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from collectors.base_collector import BaseCollector
+from db.queries import insert_raw_item
 
 
 class OTXCollector(BaseCollector):
@@ -216,3 +217,37 @@ class OTXCollector(BaseCollector):
                 break
 
         return all_records[:max_results]
+    
+#--------------test--------------------------------------
+if __name__ == "__main__":
+    print("[*] Starting test run for OTXCollector...")
+    # Init the collector
+    collector = OTXCollector()
+
+    print("[*] Fetching recent threat reports from the year 2024...")
+    # Call the function to fetch data (year 2024)
+    recent_threats = collector.fetch_by_time(max_results=50, year=2024)
+
+    print(f"[*] Found {len(recent_threats)} reports. Starting to save to Database...")
+
+    success_count = 0
+    duplicate_count = 0
+
+    # Scan through the fetched reports and save them to the database
+    for threat_data in recent_threats:
+        try:
+            # Call the insert function from db/queries.py to save the data
+            inserted_id = insert_raw_item(threat_data)
+            
+            if inserted_id:
+                print(f"[+] Saved: {threat_data['title']} (ID: {inserted_id})")
+                success_count += 1
+            else:
+                print(f"[-] Ignored duplicate: {threat_data['title']}")
+                duplicate_count += 1
+                
+        except Exception as e:
+            print(f"[!] Error saving article '{threat_data['title']}': {e}")
+
+    print("-" * 60)
+    print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")

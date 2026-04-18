@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from collectors.base_collector import BaseCollector
+from db.queries import insert_raw_item, get_unprocessed_batch
 
 # Regular expression to identify CVE IDs (e.g., CVE-2021-44228)
 CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
@@ -62,11 +63,12 @@ class NVDCollector(BaseCollector):
                 )
 
         if year is not None:
-            # Chunk the year to bypass the NIST 120-day limit
+            # Chunk the year into 4 quarters to safely bypass the NIST 120-day limit
             chunks = [
-                (datetime(year, 1, 1, tzinfo=timezone.utc),  datetime(year, 4, 30, 23, 59, 59, tzinfo=timezone.utc)),
-                (datetime(year, 5, 1, tzinfo=timezone.utc),  datetime(year, 8, 31, 23, 59, 59, tzinfo=timezone.utc)),
-                (datetime(year, 9, 1, tzinfo=timezone.utc),  datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)),
+                (datetime(year, 1, 1, tzinfo=timezone.utc),  datetime(year, 3, 31, 23, 59, 59, tzinfo=timezone.utc)),
+                (datetime(year, 4, 1, tzinfo=timezone.utc),  datetime(year, 6, 30, 23, 59, 59, tzinfo=timezone.utc)),
+                (datetime(year, 7, 1, tzinfo=timezone.utc),  datetime(year, 9, 30, 23, 59, 59, tzinfo=timezone.utc)),
+                (datetime(year, 10, 1, tzinfo=timezone.utc), datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)),
             ]
             
             all_results = []
@@ -76,13 +78,14 @@ class NVDCollector(BaseCollector):
                     break
 
                 params: dict[str, Any] = {
-                    "pubStartDate":   start.strftime("%Y-%m-%dT%H:%M:%S.000"),
-                    "pubEndDate":     end.strftime("%Y-%m-%dT%H:%M:%S.000"),
+                    # Added 'Z' to strictly follow NVD API ISO-8601 requirements
+                    "pubStartDate":   start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                    "pubEndDate":     end.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                     "resultsPerPage": min(remaining, 2000), 
                     "startIndex":     0,
                 }
                 if cvss_severity:
-                    params["cvssV3Severity"] = cvss_severity
+                    params = cvss_severity
 
                 all_results.extend(self._paginate(params, remaining))
                 
@@ -94,13 +97,14 @@ class NVDCollector(BaseCollector):
             start = end - timedelta(days=days_back or 7)
 
             params: dict[str, Any] = {
-                "pubStartDate":   start.strftime("%Y-%m-%dT%H:%M:%S.000"),
-                "pubEndDate":     end.strftime("%Y-%m-%dT%H:%M:%S.000"),
+                # Added 'Z' to strictly follow NVD API ISO-8601 requirements
+                "pubStartDate":   start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                "pubEndDate":     end.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 "resultsPerPage": min(max_results, 2000),
                 "startIndex":     0,
             }
             if cvss_severity:
-                params["cvssV3Severity"] = cvss_severity
+                params = cvss_severity
 
             return self._paginate(params, max_results)
 
@@ -245,3 +249,38 @@ class NVDCollector(BaseCollector):
             for d in w.get("description", [])
             if d.get("value", "").startswith("CWE-")
         ]
+    
+#--------------test--------------------------------------
+if __name__ == "__main__":
+    print("[*] Starting test run for NVDCollector...")
+    # Init the collector
+    collector = NVDCollector()
+
+    print("[*] Fetching recent threat reports from the year 2024...")
+    # Call the function to fetch data (year 2024)
+    recent_threats = collector.fetch_by_time(max_results=50, year=2024)
+
+    print(f"[*] Found {len(recent_threats)} reports. Starting to save to Database...")
+
+    success_count = 0
+    duplicate_count = 0
+
+    # Scan through the fetched reports and save them to the database
+    for threat_data in recent_threats:
+        try:
+            # Call the insert function from db/queries.py to save the data
+            inserted_id = insert_raw_item(threat_data)
+            
+            if inserted_id:
+                print(f"[+] Saved: {threat_data['title']} (ID: {inserted_id})")
+                success_count += 1
+            else:
+                print(f"[-] Ignored duplicate: {threat_data['title']}")
+                duplicate_count += 1
+                
+        except Exception as e:
+            print(f"[!] Error saving article '{threat_data['title']}': {e}")
+
+    print("-" * 60)
+    print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")
+    # print(get_unprocessed_batch(10))
