@@ -1,6 +1,6 @@
 import json
 import datetime
-from db import get_db_connection
+from db.db import get_db_connection
 
 # =====================================================================
 # MODULE 1: DATA COLLECTION 
