@@ -60,8 +60,8 @@ NVD_API_KEY="your_nvd_api_key_here" #OPTIONAL
 OTX_API_KEY="your_alienvault_api_key_here"
 ```
 
-**10. Testing collectors**
+**10. Testing pipeline**
 ``` bash
-python -m tests.test_collectors  
+python -m tests.<test_module_name>  
 ```
 
