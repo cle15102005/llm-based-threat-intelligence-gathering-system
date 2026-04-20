@@ -146,7 +146,7 @@ class RSSCollector(BaseCollector):
         except Exception:
             return None
         
-
+"""
 #--------------test--------------------------------------
 if __name__ == "__main__":
     print("[*] Starting test run for RSSCollector...")
@@ -180,3 +180,4 @@ if __name__ == "__main__":
 
     print("-" * 60)
     print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")
+"""

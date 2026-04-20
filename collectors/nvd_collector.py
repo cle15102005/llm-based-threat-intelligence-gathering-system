@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from dotenv import load_dotenv
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -249,12 +250,15 @@ class NVDCollector(BaseCollector):
             for d in w.get("description", [])
             if d.get("value", "").startswith("CWE-")
         ]
-    
+
+
+""" 
 #--------------test--------------------------------------
 if __name__ == "__main__":
     print("[*] Starting test run for NVDCollector...")
+    load_dotenv() # Load environment variables from .env file 
     # Init the collector
-    collector = NVDCollector()
+    collector = NVDCollector(os.getenv("NVD_API_KEY"))
 
     print("[*] Fetching recent threat reports from the year 2024...")
     # Call the function to fetch data (year 2024)
@@ -284,3 +288,4 @@ if __name__ == "__main__":
     print("-" * 60)
     print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")
     # print(get_unprocessed_batch(10))
+"""

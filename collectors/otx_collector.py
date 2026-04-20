@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dotenv import load_dotenv
 import requests
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -217,12 +218,15 @@ class OTXCollector(BaseCollector):
                 break
 
         return all_records[:max_results]
-    
+
+
+"""   
 #--------------test--------------------------------------
 if __name__ == "__main__":
     print("[*] Starting test run for OTXCollector...")
+    load_dotenv() # Load environment variables from .env file 
     # Init the collector
-    collector = OTXCollector()
+    collector = OTXCollector(os.getenv("OTX_API_KEY"))
 
     print("[*] Fetching recent threat reports from the year 2024...")
     # Call the function to fetch data (year 2024)
@@ -251,3 +255,4 @@ if __name__ == "__main__":
 
     print("-" * 60)
     print(f"[*] Success! Saved new: {success_count} | Duplicates: {duplicate_count}")
+"""
