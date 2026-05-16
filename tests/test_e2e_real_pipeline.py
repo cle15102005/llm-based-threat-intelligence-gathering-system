@@ -27,7 +27,7 @@ from collectors.otx_collector import OTXCollector
 from preprocessor.pipeline import run_preprocessing_batch
 from enrichment.entity_extractor import extract_and_store
 from enrichment.ner_spacy import extract_and_store_ner
-from enrichment.attack_mapper import map_text_to_mitre
+from enrichment.attack_mapper import map_ttps
 from enrichment.report_generator import generate_analyst_summary
 
 class TestEndToEndRealPipeline(unittest.TestCase):
@@ -118,7 +118,7 @@ class TestEndToEndRealPipeline(unittest.TestCase):
             print("\n[PHASE 4] FIRING UP LOCAL LLM (LLAMA 3)...")
 
             # Find valid TTPs and save to DB
-            mapped_ttps = map_text_to_mitre(source_id=source_id, cleaned_text=secured_text)
+            mapped_ttps = map_ttps(source_id=source_id, cleaned_text=secured_text)
             print(f" -> Identified {len(mapped_ttps)} valid TTPs.")
 
             # Generate final report based on all extracted info (entities + TTPs), cite source_id for traceability

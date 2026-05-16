@@ -100,3 +100,25 @@ def update_report_status(source_id: int, status: str):
     sql = "UPDATE reports SET status =? WHERE source_id =?"
     with get_db_connection() as conn:
         conn.execute(sql, (status, source_id))
+
+def get_pending_reports() -> list:
+    """Fetch all reports with status='pending', joined with raw_items."""
+    sql = """
+        SELECT r.id as report_id, r.source_id, r.summary, r.created_at,
+               ri.title, ri.source
+        FROM reports r
+        JOIN raw_items ri ON r.source_id = ri.id
+        WHERE r.status = 'pending'
+    """
+    with get_db_connection() as conn:
+        return [dict(row) for row in conn.execute(sql).fetchall()]
+
+def get_entities_for_source(source_id: int) -> list:
+    sql = "SELECT entity_type, entity_value FROM entities WHERE source_id = ?"
+    with get_db_connection() as conn:
+        return [dict(row) for row in conn.execute(sql, (source_id,)).fetchall()]
+
+def get_ttps_for_source(source_id: int) -> list:
+    sql = "SELECT ttp_id, technique_name FROM ttp_mappings WHERE source_id = ?"
+    with get_db_connection() as conn:
+        return [dict(row) for row in conn.execute(sql, (source_id,)).fetchall()]

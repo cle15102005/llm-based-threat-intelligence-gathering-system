@@ -302,10 +302,23 @@ class RSSCollector(BaseCollector):
 
     def _fetch_raw(self) -> list[Any]:
         """Pull and parse the RSS feed. Returns feedparser entry objects."""
-        feed = feedparser.parse(self.feed_url)
-        if feed.bozo:
+        import requests, ssl
+        try:
+            # Bypass SSL verification for Windows environments with missing certs
+            resp = requests.get(self.feed_url, timeout=15, verify=False)
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
+        except Exception as e:
+            print(f"[!] RSS fetch error: {e}")
+            return []
+        if feed.bozo and not feed.entries:
             print(f"[!] RSS parse warning: {feed.bozo_exception}")
         return feed.entries
+        
+        # feed = feedparser.parse(self.feed_url)
+        # if feed.bozo:
+        #     print(f"[!] RSS parse warning: {feed.bozo_exception}")
+        # return feed.entries
 
     # ── Date helpers ──────────────────────────────────────────────────────────
 
