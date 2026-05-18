@@ -57,7 +57,7 @@ class TestEndToEndRealPipeline(unittest.TestCase):
         for col in collectors:
             print(f" -> Fetching from {col.source_name}...")
             # Fetch 1 recent record from each source to test the integration
-            items = col.fetch_by_time(days_back=7, max_results=1)
+            items = col.fetch_by_time(days_back=7, max_results=2)
             all_raw_items.extend(items)
             
         self.assertTrue(len(all_raw_items) > 0, "No data found from any source.")
@@ -83,8 +83,8 @@ class TestEndToEndRealPipeline(unittest.TestCase):
         # ---------------------------------------------------------
         print("\n[PHASE 2] PREPROCESSING & SANITIZATION...")
         # Process 1 item to verify the pipeline flow
-        processed_batch = run_preprocessing_batch(batch_size=3)
-        self.assertEqual(len(processed_batch), 3)
+        processed_batch = run_preprocessing_batch(batch_size=6)
+        self.assertEqual(len(processed_batch), 6)
         
 # ---------------------------------------------------------
 # LOOP FOR EACH PROCESSED ITEM TO EXTRACT ENTITIES, MAP TTPs, AND GENERATE FINAL REPORT
