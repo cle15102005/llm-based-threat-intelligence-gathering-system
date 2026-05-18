@@ -69,7 +69,7 @@ class LanguageDetector:
             "prompt": f"{self.system_prompt}\n\nText to translate:\n{text}",
             "stream": False,  
             "options": {
-                # Temperature 0.0 is critical: it stops the LLM from being "creative" 
+                # Temperature 0.0 stops the LLM from being "creative" 
                 # and forces a deterministic, strict translation.
                 "temperature": 0.0  
             }
