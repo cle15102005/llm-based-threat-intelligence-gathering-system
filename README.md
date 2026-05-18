@@ -50,7 +50,7 @@ ollama pull nomic-embed-text
 **7. Install and Run Neo4j via Docker**
 We use Neo4j to store and correlate threat actors, malware, and CVEs.
 ```bash
-docker run --name threat-graph -p 7474:7474 -p 7687:7687 -d -e NEO4J_AUTH=neo4j/password neo4j:latest
+docker-compose up -d
 ```
 Open http://localhost:7474 in your browser to access the Neo4j Query Console. 
 
