@@ -1,42 +1,51 @@
-LLM-BASED THREAT INTELLIGENCE GATHERING SYSTEM: ENRICHMENT ARCHITECTURE
+LLM-BASED THREAT INTELLIGENCE GATHERING SYSTEM: ENRICHMENT ARCHITECTURE (HYBRID GRAPH-VECTOR UPDATE)
 ==========================================================================
 
-The Enrichment layer is designed as a multi-stage pipeline that transitions from deterministic data extraction to complex semantic reasoning. This layer ensures that raw threat data is enriched with technical, behavioral, and strategic context before reaching the final analyst.
+The Enrichment layer is designed as a multi-stage pipeline that transitions from deterministic data extraction to semantic vector search and complex graph reasoning. 
+This layer ensures that raw threat data is enriched with technical context, mapped to official frameworks, and evaluated for impact before reaching the final analyst.
 
 STAGE 1: DETERMINISTIC INDICATOR EXTRACTION
 --------------------------------------------
 - Primary File: entity_extractor.py
 - Mechanism: Pre-compiled Regular Expressions (Regex).
-- Purpose: Identifies "Hard IOCs" such as CVE IDs, IPv4/IPv6 addresses, Domains, and Cryptographic Hashes (MD5, SHA1, SHA256).
-- Strategy: By performing this extraction first, the system handles high-volume, fixed-pattern data with 100% precision, ensuring that the LLM in later stages does not need to "guess" technical identifiers.
+- Purpose: Identifies "Hard IOCs" such as explicit CVE IDs, IPv4/IPv6 addresses, Domains, and Cryptographic Hashes (MD5, SHA1, SHA256).
+- Strategy: By performing this extraction first, the system handles high-volume, fixed-pattern data with 100% precision. 
+Results are stored exclusively in the SQLite 'entities' table.
 
-STAGE 2: SEMANTIC ENTITY RECOGNITION (NER)
+STAGE 2: SEMANTIC ENTITY RECOGNITION (NER) & EXTRACTION
 ------------------------------------------
-- Primary File: ner_spacy.py
-- Mechanism: spaCy NLP Pipeline with a custom 'EntityRuler'.
-- Purpose: Extracts "Soft Entities" like Threat Actor groups (e.g., Lazarus, APT41) and Malware families (e.g., Ryuk, Emotet).
-- Strategy: The base 'en_core_web_sm' model is augmented with a custom pattern catalogue of 60+ entries. This ensures that domain-specific jargon (like 'Fancy Bear') is correctly labeled as THREAT_ACTOR rather than a generic person or organization.
+- Primary File: ner_spacy.py / llm_entity_extractor.py
+- Mechanism: spaCy NLP Pipeline / Local Llama 3 Model.
+- Purpose: Extracts "Soft Entities" like Threat Actor groups (e.g., Lazarus) and Malware families (e.g., Emotet) that do not follow fixed regex patterns.
+- Strategy: Extracted actors and malware are stored in the SQLite database to maintain a clean historical record of OSINT findings without bloating the core Knowledge Graph with unverified entities.
 
-STAGE 3: THE KNOWLEDGE ENGINE - FEW-SHOT MAPPING
+STAGE 3: BEHAVIORAL TRANSLATION (HyDE PATTERN)
 ------------------------------------------------- 
-- Primary Files: few_shot_examples.py (Knowledge Base) & attack_mapper.py (Execution Engine).
-- Mechanism: In-Context Learning (ICL) using Llama 3 via LangChain.
-- Deep Dive - few_shot_examples.py:
-    * Purpose: This file acts as the "Brain" of the mapper. LLMs often struggle with specific output formats (JSON) or complex frameworks like MITRE ATT&CK without guidance.
-    * Contents: It contains 5 curated, high-fidelity examples:
-        1. Initial Access: Mapping Log4Shell to T1190.
-        2. Execution/Lateral Movement: Mapping PowerShell/SMB to T1059.001 and T1021.002.
-        3. Exfiltration: Mapping encrypted ZIPs and Dropbox API to T1560.001 and T1048.002.
-        4. Persistence: Mapping WannaCry Registry keys to T1053.005 and T1547.001.
-        5. Command & Control: Mapping TLS 1.3 and Domain Fronting to T1071.001 and T1090.004.
-    * Logic: It provides the 'SYSTEM_PREFIX' (defining the analyst persona) and 'EXAMPLE_PROMPT' (structuring the input/output pair) which are essential for stable LLM performance.
-- Deep Dive - attack_mapper.py:
-    * Logic: It combines the few-shot examples with the 'cleaned_text' into a single prompt.
-    * Anti-Hallucination: After the LLM generates TTP IDs, this script validates them against 'enterprise-attack.json'. If an ID (e.g., T9999) does not exist in the official MITRE framework, it is discarded.
+- Primary File: behavior_translator.py
+- Mechanism: Local LLM (Llama 3) via structured JSON prompting.
+- Purpose: Eliminates the "Vocabulary Mismatch" problem between informal forum slang and formal MITRE terminology.
+- Strategy: The LLM processes the translated text and extracts an array of distinct cyber attack techniques. 
+For EACH technique, it generates a single, highly technical sentence summarizing the exact attack behavior. 
+This standardizes the text before mathematical comparison.
 
-STAGE 4: ANALYST SYNTHESIS & RAG REPORTING
+STAGE 4: SEMANTIC VECTOR SEARCH & GRAPH TRAVERSAL
+-------------------------------------------------
+- Primary File: kg_engine.py (Replaces legacy attack_mapper.py and few_shot_examples.py)
+- Mechanism: Local Embedding Model (e.g., all-MiniLM-L6-v2) + Neo4j Vector Index & Cypher Graph Traversal.
+- Purpose: Maps the technical behaviors to official MITRE TTPs/CVEs and calculates the potential blast radius.
+- Strategy: 
+    1. Vectorization: Python converts each technical behavior sentence from Stage 3 into a high-dimensional mathematical vector.
+    2. Semantic Matching: Neo4j calculates Cosine Similarity against the official NVD/MITRE vectors stored in the graph.
+    3. Strict Thresholding: The system retrieves ALL matched CVEs and MITRE TTPs that satisfy a strict similarity threshold of >= 80% (0.80). If no historical vectors meet this threshold, the system flags the behavior as a potential Zero-Day or Novel Technique.
+    4. Blast Radius Traversal: For every matched CVE/TTP, a Cypher query traverses the Neo4j graph (e.g., -[AFFECTS]->) to extract all known related software, systems, and standard mitigations.
+
+STAGE 5: ANALYST SYNTHESIS & PROACTIVE REPORTING
 ------------------------------------------
 - Primary File: report_generator.py
-- Mechanism: Closed-Domain Retrieval-Augmented Generation (RAG).
-- Purpose: Produces the final executive summary.
-- Strategy: The LLM is strictly constrained to the 'Context' (Cleaned Text + Extracted Entities + Verified TTPs). It is mandated to include [source_id: X] citations for every claim. If the data is insufficient, it must return a standard "Insufficient data to determine" response to prevent analyst misinformation.
+- Mechanism: Hybrid Retrieval-Augmented Generation (RAG).
+- Purpose: Produces the final actionable executive summary.
+- Strategy: The LLM is provided with a comprehensive prompt containing:
+    * The original OSINT article text.
+    * Extracted entities from SQLite (Actors, Malware, Hard IOCs).
+    * Graph Context from Neo4j (>=80% matched TTPs/CVEs and systems at risk).
+  The LLM synthesizes this into a single report, detailing the threat, identifying novelty (Zero-Day status), and providing actionable mitigation advice based on the graph context. It is strictly mandated to append [source_id: X] citations for traceability. for every claim. If the data is insufficient, it must return a standard "Insufficient data to determine" response to prevent analyst misinformation.
