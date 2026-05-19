@@ -39,7 +39,7 @@ def validate_ttp_id(ttp_id: str) -> bool:
     except Exception:
         return False
 
-def map_text_to_mitre(source_id: int, cleaned_text: str) -> list:
+def map_ttps(source_id: int, cleaned_text: str) -> list:
     """
     Orchestrates the mapping process by invoking the Few-Shot chain,
     filtering the output, and storing valid TTPs in the database.
