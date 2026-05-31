@@ -84,7 +84,6 @@ Zero-Day Flag        : {is_zero_day}
 === REPORT ===
 
 ## Threat Overview
-## Threat Overview
 First write the source URL and post date:
 Source URL: {source_url} | Post Date: {post_date}
 Then, analyze the text and summarize it in 5-7 HIGHLY DETAILED sentences based on its type:
@@ -120,8 +119,6 @@ Otherwise for EACH CVE LISTED ABOVE: write one line describing what it is, what 
 Systems at Risk: {systems_at_risk}
 If the above is "None identified", write: "Insufficient data to determine."
 Otherwise for each system listed: write ONE LINE:
-[system name] — [what it is, how it is affected in this attack in the context of the threat data, version if available]
-New line: ⚠️ WARNING: Check if any of these systems exist in your infrastructure. [source_id: {source_id}]
 New line: ⚠️ WARNING: These systems are affected by known CVEs/TTPs. The attacker in this post used similar techniques and could exploit these systems in your environment. [source_id: {source_id}]
 
 ## Zero-Day Assessment

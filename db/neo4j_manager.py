@@ -122,7 +122,6 @@ class GraphConnector:
     def get_ttp_by_id(self, ttp_id: str) -> dict:
         """Fetches a MITRE TTP node by its TTP ID."""
         results = self._execute_read(GET_TTP_IDS, ttp_id=ttp_id)
-        print(results)
         return results
     
     def get_cve_by_id(self, cve_id: str) -> dict:

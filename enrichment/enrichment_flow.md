@@ -72,27 +72,3 @@ The Enrichment layer is designed as a multi-stage pipeline that transitions from
 
 ---
 
-## Stage 5: Analyst Synthesis & Proactive Reporting
-
-- **Primary File:** `report_generator.py`
-- **Mechanism:** Hybrid Retrieval-Augmented Generation (RAG) with Closed-Domain prompting
-- **Purpose:** Produces the final actionable intelligence report for the security operations team.
-- **Strategy:** The LLM (Llama 3, `num_ctx=8192`, `num_predict=2048`) receives a fully structured closed-domain prompt containing:
-  - The original OSINT text encapsulated in `<THREAT_DATA>` tags (prompt injection defense)
-  - Post date and source URL
-  - Extracted entities from SQLite: Threat Actors, Malware, Hard IOCs, Target Software
-  - Graph context from Neo4j: matched CVEs, matched TTPs, systems at risk, zero-day flag, unmatched behaviors
-  - Real MITRE TTP names looked up from knowledge graph — prevents the LLM from inventing technique descriptions
-
-  The report is structured into seven mandatory sections: Threat Overview, Indicators of Compromise, Targeted Systems, MITRE ATT&CK Mapping, Matched Vulnerabilities, Blast Radius, Zero-Day Assessment, and Recommended Actions. Each section cites `[source_id: X]` after every factual claim.
-
-  **Prompt injection defense** is enforced at two levels:
-  1. **Pre-LLM guard** — `generate_analyst_summary()` raises `ValueError` if `cleaned_text` does not start with `<THREAT_DATA>` tags, rejecting raw unencapsulated input before any LLM call
-  2. **In-prompt shield** — the anti-injection block appears at the top of the prompt before any untrusted data, instructing the LLM to treat content inside `<THREAT_DATA>` as passive data and ignore any commands found within it
-
-  **Zero-Day Assessment** distinguishes three cases:
-  - `is_zero_day=True` → full `⚠ WARNING` banner flagging a novel/unseen technique requiring immediate analyst review, listing all unmatched behaviors explicitly
-  - `is_zero_day=False` but `unmatched_behaviors` non-empty → `⚠ NOTICE` that broad TTP categories matched but specific behaviors remain unmapped, may represent novel variants
-  - `is_zero_day=False` and `unmatched_behaviors` empty → confirmation that all behaviors mapped to known threats
-
-  The final report is persisted to the SQLite `reports` table linked to the `raw_items.id` for analyst review via the CLI.

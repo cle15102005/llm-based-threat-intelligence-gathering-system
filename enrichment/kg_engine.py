@@ -34,7 +34,7 @@ class KnowledgeEngine:
 
         if not behaviors:
             return {
-                "matched_cves": [], "matched_ttps": [], "systems_at_risk": [], "is_zero_day": True,
+                "matched_cves": [], "matched_ttps": [], "systems_at_risk": [], "is_zero_day": False,
                 "unmatched_behaviors": []
             }
         

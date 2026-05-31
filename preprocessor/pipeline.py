@@ -9,6 +9,7 @@ import logging
 import sys
 
 # Import the 3 core preprocessing components
+from db.sqlite_manager import store_processed_description
 from preprocessor.html_stripper import strip_html
 from preprocessor.language_detector import LanguageDetector
 from preprocessor.encapsulator import encapsulate_threat_data
@@ -23,7 +24,7 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-def run_preprocessing_batch(batch_size: int = 10) -> list:
+def run_preprocessing_batch(batch_size: int = 1) -> list:
     """
     Executes the preprocessing pipeline for a specific batch size.
     Returns a list of dictionaries containing the sanitized items.
@@ -53,6 +54,9 @@ def run_preprocessing_batch(batch_size: int = 10) -> list:
             secured_string = encapsulate_threat_data(item['description'])
             
             item['processed_text'] = secured_string
+            # store_processed_description(item['id'], item['description'])  # Update the DB with the cleaned description
+            store_processed_description(item['id'], item['description'])
+            
             # Sanity-check: downstream enrichment must use processed_text, not description
             assert item['processed_text'].startswith("<THREAT_DATA>"), (
                 f"Encapsulation failed for item ID {item['id']} — "
@@ -69,6 +73,3 @@ def run_preprocessing_batch(batch_size: int = 10) -> list:
             
     return processed_items
 
-if __name__ == "__main__":
-    # Test execution
-    run_preprocessing_batch(5)

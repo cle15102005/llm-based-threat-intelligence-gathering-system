@@ -190,7 +190,7 @@ def collect_parallel(
 
 # ── Stage 2: Preprocess ───────────────────────────────────────────────────────
 
-def run_preprocess(batch_size: int = 10) -> int:
+def run_preprocess(batch_size: int = 1) -> int:
     """
     HTML stripping > language detection > XML encapsulation > mark processed.
 
@@ -212,6 +212,9 @@ def run_preprocess(batch_size: int = 10) -> int:
         try:
             processed = run_preprocessing_batch(batch_size=batch_size)
             count = len(processed)
+            if count == 1:
+                print_status("1 item successfully preprocessed", "ok")
+                break
             total += count
             if count == 0:
                 break

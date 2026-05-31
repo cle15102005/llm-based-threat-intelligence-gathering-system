@@ -12,7 +12,8 @@ from db.queries import (
     INSERT_ENTITY, 
     INSERT_REPORT,
     GET_ENTITIES_BY_SOURCE,
-    GET_REPORT
+    GET_REPORT,
+    STORE_PROCESSED_ITEM_DESCRIPTION
 )
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,11 @@ def insert_raw_item(data: tuple) -> int:
         )
         row = cursor2.fetchone()
         return row["id"] if row else 0
+
+def store_processed_description(item_id: int, description: str):
+    """Updates the description field of a raw item after HTML stripping and translation."""
+    with get_db_connection() as conn:
+        conn.execute(STORE_PROCESSED_ITEM_DESCRIPTION, (description, item_id))
     
 def get_post_date(item_id: int) -> str:
     """Fetches the published date of a raw item by its ID."""
