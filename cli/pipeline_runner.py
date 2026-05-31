@@ -56,6 +56,10 @@ def _factory_sans() -> Any:
     from collectors.rss_collector import RSSCollector, KNOWN_FEEDS
     return RSSCollector(feed_url=KNOWN_FEEDS["sans_isc"], source_name="sans_isc")
 
+def _factory_xakep():
+    from collectors.rss_collector import RSSCollector, KNOWN_FEEDS
+    return RSSCollector(feed_url=KNOWN_FEEDS["xakep"], source_name="xakep")
+
 def _factory_reddit_netsec() -> Any:
     from collectors.rss_collector import RSSCollector, KNOWN_FEEDS
     return RSSCollector(feed_url=KNOWN_FEEDS["reddit_netsec"], source_name="reddit_netsec")
@@ -72,6 +76,7 @@ COLLECTOR_REGISTRY: dict[str, tuple[str, Callable]] = {
     "exploitdb":            ("RSS  — Exploit-DB",             _factory_exploitdb),
     "bleeping_computer":    ("RSS  — BleepingComputer",       _factory_bleeping),
     "sans_isc":             ("RSS  — SANS ISC",               _factory_sans),
+    "xakep":                ("RSS  — Xakep",                  _factory_xakep),
     "reddit_netsec":        ("RSS  — Reddit r/netsec",        _factory_reddit_netsec),
     "reddit_cybersecurity": ("RSS  — Reddit r/cybersecurity", _factory_reddit_cybersec),
 }
@@ -83,6 +88,7 @@ SOURCE_MENU_ORDER: list[str] = [
     "exploitdb",
     "bleeping_computer",
     "sans_isc",
+    "xakep", 
     "nvd",
     "otx",
 ]
@@ -224,41 +230,29 @@ def run_preprocess(batch_size: int = 10) -> int:
 
 # ── Stage 3: Enrich ──────────────────────────────────────────────────────────
 
-def run_enrich(source_id: int | None = None) -> int:
+def run_enrich(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
     """
-    Regex IOC extraction and spaCy NER for processed raw items.
+    Regex IOC extraction + spaCy NER + behavior translation + KG query.
 
     Args:
         source_id : enrich only this item when provided; all processed items otherwise.
 
     Returns:
-        Total entities stored.
+        (total_entities, kg_payloads)   where kg_payloads is {source_id: payload_dict}
     """
     print_header("ENRICH")
     from enrichment.entity_extractor import extract_and_store
     from enrichment.ner_spacy import extract_and_store_ner
     from db.sqlite_manager import get_db_connection, get_entities
-
-    # with get_db_connection() as conn:
-    #     if source_id is not None:
-    #         rows = conn.execute(
-    #             "SELECT id, description FROM raw_items WHERE processed = 1 AND id = ?",
-    #             (source_id,),
-    #         ).fetchall()
-    #     else:
-    #         rows = conn.execute(
-    #             "SELECT id, description FROM raw_items WHERE processed = 1"
-    #         ).fetchall()
+    from preprocessor.encapsulator import encapsulate_threat_data
 
     with get_db_connection() as conn:
         if source_id is not None:
-            # Targeted reprocess — always re-enrich this specific item
             rows = conn.execute(
                 "SELECT id, description FROM raw_items WHERE processed = 1 AND id = ?",
                 (source_id,),
             ).fetchall()
         else:
-            # Normal run — only items with no entities yet
             rows = conn.execute(
                 """SELECT ri.id, ri.description
                    FROM raw_items ri
@@ -270,20 +264,24 @@ def run_enrich(source_id: int | None = None) -> int:
 
     if not rows:
         print_status("No new items to enrich.", "info")
-        return 0
+        return 0, {}
 
     print_status(f"Enriching {len(rows)} new item(s) ...", "info")
 
     total = 0
+    kg_payloads: dict[int, dict] = {}
+
     for row in rows:
         sid  = row["id"]
         text = row["description"] or ""
 
+        # ── Stage 3a: Regex IOC extraction ───────────────────────────────────
         try:
             extract_and_store(source_id=sid, cleaned_text=text)
         except Exception as exc:
             logger.warning("entity_extractor failed for id=%d: %s", sid, exc)
 
+        # ── Stage 3b: spaCy NER ───────────────────────────────────────────────
         try:
             extract_and_store_ner(source_id=sid, cleaned_text=text)
         except Exception as exc:
@@ -293,16 +291,40 @@ def run_enrich(source_id: int | None = None) -> int:
         total += n
         print_status(f"ID {sid}: {n} entities stored", "ok")
 
-    return total
+        # ── Stage 3c: Behavior translation + KG query ─────────────────────────
+        # Encapsulate before passing to _run_kg_stage (same guard as run_report)
+        encapsulated = (
+            text if text.strip().startswith("<THREAT_DATA>")
+            else encapsulate_threat_data(text)
+        )
+        payload = _run_kg_stage(encapsulated)
+        kg_payloads[sid] = payload
+        print_status(
+            f"ID {sid}: KG — "
+            f"{len(payload.get('matched_cves', []))} CVEs, "
+            f"{len(payload.get('matched_ttps', []))} TTPs, "
+            f"zero-day={payload.get('is_zero_day')}",
+            "ok",
+        )
 
+    return total, kg_payloads
 
 # ── Stage 4: Report ───────────────────────────────────────────────────────────
 
-def run_report(source_id: int | None = None) -> int:
+def run_report(
+    source_id:   int | None        = None,
+    kg_payloads: dict[int, dict] | None = None,   # ← new optional parameter
+) -> int:
+        
     """
-    Behavior translation → KG query → LLM report generation.
-    Skips items that already have a report row.
+    LLM report generation.
 
+    Args:
+        source_id   : generate only for this item when provided.
+        kg_payloads : pre-computed KG results from run_enrich().
+                      Falls back to inline _run_kg_stage() when absent
+                      (preserves standalone `python -m cli.main report` behaviour).
+    
     Returns:
         Number of reports generated.
     """
@@ -336,8 +358,15 @@ def run_report(source_id: int | None = None) -> int:
         if not text.strip().startswith("<THREAT_DATA>"):
             text = encapsulate_threat_data(text)
 
-        entities   = get_entities(sid)
-        kg_payload = _run_kg_stage(text)
+        entities = get_entities(sid)
+
+        # Use pre-computed payload from enrich stage when available;
+        # otherwise compute inline (standalone call or item missed by enrich)
+        if kg_payloads is not None and sid in kg_payloads:
+            kg_payload = kg_payloads[sid]
+            print_status(f"ID {sid}: using pre-computed KG payload", "info")
+        else:
+            kg_payload = _run_kg_stage(text)
 
         try:
             generate_analyst_summary(
@@ -355,6 +384,7 @@ def run_report(source_id: int | None = None) -> int:
     return generated
 
 
+
 # ── Reprocess single item ─────────────────────────────────────────────────────
 
 def reprocess_item(source_id: int) -> None:
@@ -370,8 +400,8 @@ def reprocess_item(source_id: int) -> None:
     remark_processed(source_id)
 
     run_preprocess()
-    run_enrich(source_id=source_id)
-    run_report(source_id=source_id)
+    _, kg_payloads = run_enrich(source_id=source_id)
+    run_report(source_id=source_id, kg_payloads=kg_payloads)
 
     print_status(f"Reprocessing complete for item {source_id}.", "ok")
 
@@ -394,8 +424,8 @@ def run_full_pipeline(
 
     collect_parallel(source_keys, db_path, mode=mode, **fetch_kwargs)
     run_preprocess()
-    run_enrich()
-    run_report()
+    _, kg_payloads = run_enrich()           # unpack: (total_entities, payloads)
+    run_report(kg_payloads=kg_payloads)
 
     if run_review:
         from cli.review_gate import run_review_gate
