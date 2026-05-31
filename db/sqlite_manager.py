@@ -24,6 +24,7 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 @contextmanager
 def get_db_connection():
     """Provides a safe connection context for SQLite, yielding dictionary-like rows."""
+    
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -87,6 +88,20 @@ def get_unprocessed_batch(limit: int = 10) -> list:
         cursor = conn.execute(GET_UNPROCESSED_BATCH, (limit,))
         return [dict(row) for row in cursor.fetchall()]
 
+def count_unprocessed_items() -> int:
+    """Counts the number of unprocessed items in the database."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM raw_items WHERE processed = 0")
+        row = cursor.fetchone()
+        return row["count"] if row else 0
+    
+def count_preprocessed_unenriched_items() -> int:
+    """Counts the number of items that have been preprocessed but not yet enriched/reported."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM raw_items LEFT JOIN reports ON raw_items.id = reports.source_id WHERE raw_items.processed = 1 AND reports.id IS NULL")
+        row = cursor.fetchone()
+        return row["count"] if row else 0
+
 def mark_processed(item_id: int):
     """Flags a raw item as securely sanitized and ready for enrichment."""
     with get_db_connection() as conn:
@@ -120,7 +135,3 @@ def get_report(source_id: int) -> dict:
         row = cursor.fetchone()
         return dict(row) if row else None
     
-if __name__ == "__main__":
-    """Initializes the database when this module is run directly."""
-    remark_processed(5)
-    print("Processed status reset for item ID 4.")  # Example: reset processed status for item ID 4 for testing

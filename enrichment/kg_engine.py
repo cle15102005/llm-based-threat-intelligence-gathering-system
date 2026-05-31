@@ -139,6 +139,7 @@ class KnowledgeEngine:
                     r for r in results
                     if r.get("threat_id") in context_relevant_ids
                 ]
+            logger.info(f"[-] Per-behavior search for: '{sentence}' found {len(results)} context-relevant matches")
 
             if results:
                 if sentence in unmatched_behaviors:

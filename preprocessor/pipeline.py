@@ -53,14 +53,14 @@ def run_preprocessing_batch(batch_size: int = 1) -> list:
             # Step 4: Encapsulate the now-clean, English description
             secured_string = encapsulate_threat_data(item['description'])
             
-            item['processed_text'] = secured_string
-            # store_processed_description(item['id'], item['description'])  # Update the DB with the cleaned description
+            item['description'] = secured_string
+            # store_processed_description(item['id'], item['description'])  # Update the DB with the cleaned encapsulated description
             store_processed_description(item['id'], item['description'])
             
-            # Sanity-check: downstream enrichment must use processed_text, not description
-            assert item['processed_text'].startswith("<THREAT_DATA>"), (
+            # Sanity-check: downstream enrichment must use cleaned, encapsulated description for LLM input, not the raw text
+            assert item['description'].startswith("<THREAT_DATA>"), (
                 f"Encapsulation failed for item ID {item['id']} — "
-                "pass item['processed_text'] to the enrichment layer, not item['description']"
+                "pass unprocessed item['description'] to the enrichment layer"
             )
             processed_items.append(item)
             
