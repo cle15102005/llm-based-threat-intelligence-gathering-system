@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cli.formatter import print_header, print_status
+from db.sqlite_manager import init_db
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ def collect_parallel(
 
 # ── Stage 2: Preprocess ───────────────────────────────────────────────────────
 
-def run_preprocess(batch_size: int = 10) -> int:
+def run_preprocess(batch_size: int = 1) -> int:
     """
     HTML stripping > language detection > XML encapsulation > mark processed.
 
@@ -212,6 +213,12 @@ def run_preprocess(batch_size: int = 10) -> int:
         try:
             processed = run_preprocessing_batch(batch_size=batch_size)
             count = len(processed)
+
+            # for demo only
+            if count == 1:
+                print_status("1 item successfully preprocessed", "ok")
+                break
+
             total += count
             if count == 0:
                 break
@@ -230,7 +237,7 @@ def run_preprocess(batch_size: int = 10) -> int:
 
 # ── Stage 3: Enrich ──────────────────────────────────────────────────────────
 
-def run_enrich(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
+def run_entities_extractor(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
     """
     Regex IOC extraction + spaCy NER + behavior translation + KG query.
 
@@ -253,6 +260,7 @@ def run_enrich(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
                 (source_id,),
             ).fetchall()
         else:
+            # Select processed items that have no entities yet (newly preprocessed or previously missed), optionally filtered by source_id
             rows = conn.execute(
                 """SELECT ri.id, ri.description
                    FROM raw_items ri
@@ -269,7 +277,6 @@ def run_enrich(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
     print_status(f"Enriching {len(rows)} new item(s) ...", "info")
 
     total = 0
-    kg_payloads: dict[int, dict] = {}
 
     for row in rows:
         sid  = row["id"]
@@ -291,23 +298,8 @@ def run_enrich(source_id: int | None = None) -> tuple[int, dict[int, dict]]:
         total += n
         print_status(f"ID {sid}: {n} entities stored", "ok")
 
-        # ── Stage 3c: Behavior translation + KG query ─────────────────────────
-        # Encapsulate before passing to _run_kg_stage (same guard as run_report)
-        encapsulated = (
-            text if text.strip().startswith("<THREAT_DATA>")
-            else encapsulate_threat_data(text)
-        )
-        payload = _run_kg_stage(encapsulated)
-        kg_payloads[sid] = payload
-        print_status(
-            f"ID {sid}: KG — "
-            f"{len(payload.get('matched_cves', []))} CVEs, "
-            f"{len(payload.get('matched_ttps', []))} TTPs, "
-            f"zero-day={payload.get('is_zero_day')}",
-            "ok",
-        )
 
-    return total, kg_payloads
+    return total
 
 # ── Stage 4: Report ───────────────────────────────────────────────────────────
 
@@ -328,13 +320,14 @@ def run_report(
     Returns:
         Number of reports generated.
     """
-    print_header("GENERATE REPORTS")
+
     from reports.report_generator import generate_analyst_summary
     from db.sqlite_manager import get_db_connection, get_entities
     from preprocessor.encapsulator import encapsulate_threat_data
 
     with get_db_connection() as conn:
         if source_id is not None:
+            # Select processed items without reports, filtered by source_id, return only the specified item
             rows = conn.execute(
                 """SELECT ri.id, ri.description
                    FROM raw_items ri
@@ -343,6 +336,7 @@ def run_report(
                 (source_id,),
             ).fetchall()
         else:
+            # Select all processed items without reports
             rows = conn.execute(
                 """SELECT ri.id, ri.description
                    FROM raw_items ri
@@ -358,9 +352,11 @@ def run_report(
         if not text.strip().startswith("<THREAT_DATA>"):
             text = encapsulate_threat_data(text)
 
-        entities = get_entities(sid)
+        #-----enrichment stage---------------------
+        #------------------------------------------
+        run_entities_extractor(source_id=sid)  # Extract entities
 
-        # Use pre-computed payload from enrich stage when available;
+        # Use pre-computed payload from enrich stage (for reprocess_item or full pipeline),;
         # otherwise compute inline (standalone call or item missed by enrich)
         if kg_payloads is not None and sid in kg_payloads:
             kg_payload = kg_payloads[sid]
@@ -368,6 +364,10 @@ def run_report(
         else:
             kg_payload = _run_kg_stage(text)
 
+        #-----report generation stage----------------------
+        #--------------------------------------------------
+        print_header("GENERATE REPORTS")
+        entities = get_entities(sid) # Fetch entities for report generation
         try:
             generate_analyst_summary(
                 source_id=sid,
@@ -400,8 +400,7 @@ def reprocess_item(source_id: int) -> None:
     remark_processed(source_id)
 
     run_preprocess()
-    _, kg_payloads = run_enrich(source_id=source_id)
-    run_report(source_id=source_id, kg_payloads=kg_payloads)
+    run_report(source_id=source_id)
 
     print_status(f"Reprocessing complete for item {source_id}.", "ok")
 
@@ -424,8 +423,7 @@ def run_full_pipeline(
 
     collect_parallel(source_keys, db_path, mode=mode, **fetch_kwargs)
     run_preprocess()
-    _, kg_payloads = run_enrich()           # unpack: (total_entities, payloads)
-    run_report(kg_payloads=kg_payloads)
+    run_report()
 
     if run_review:
         from cli.review_gate import run_review_gate

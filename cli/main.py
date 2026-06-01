@@ -25,7 +25,6 @@ from cli.pipeline_runner import (
     SOURCE_MENU_ORDER,
     collect_parallel,
     run_preprocess,
-    run_enrich,
     run_report,
     reprocess_item,
     run_full_pipeline,
@@ -99,8 +98,7 @@ def _select_operation() -> str:
         ("full_keyword", "Full Pipeline — Fetch by Keyword"),
         ("collect",      "Collect Only"),
         ("preprocess",   "Preprocess Only"),
-        ("enrich",       "Enrich Only"),
-        ("report",       "Generate Reports"),
+        ("enrichment_report",       "Enrich and Generate Reports"),
         ("review",       "Review Pending Reports"),
         ("reprocess",    "Reprocess Item by ID"),
         ("exit",         "Exit"),
@@ -251,13 +249,32 @@ def run_interactive_session() -> None:
                 collect_parallel(source_keys, db, mode=mode, **kwargs)
 
             elif operation == "preprocess":
-                run_preprocess()
+                # check if database exists:
+                if not db.exists():
+                    print_status("Database not found. Please run a collection operation first.", "warn")
+                    continue
+                # check database for unprocessed items, if none found, prompt to run collection first
+                from db.sqlite_manager import count_unprocessed_items
+                unprocessed_count = count_unprocessed_items()
+                if unprocessed_count == 0:
+                    print_status("No unprocessed items found. Please run a collection operation first.", "warn")
+                else:
+                    print_status(f"Found {unprocessed_count} unprocessed item(s). Starting preprocessing...", "info")
+                    run_preprocess()
 
-            elif operation == "enrich":
-                run_enrich()
-
-            elif operation == "report":
-                run_report()
+            elif operation == "enrichment_report":
+                # check if database exists:
+                if not db.exists():
+                    print_status("Database not found. Please run a collection operation first.", "warn")
+                    continue
+                # check database for preprocessed but not enriched items, if none found, prompt to run preprocess first
+                from db.sqlite_manager import count_preprocessed_unenriched_items   
+                pending_count = count_preprocessed_unenriched_items()
+                if pending_count == 0:
+                    print_status("No preprocessed but unenriched items found. Please run preprocessing first.", "warn") 
+                else:
+                    print_status(f"Found {pending_count} preprocessed but unenriched item(s). Starting enrichment and report generation...", "info")
+                    run_report()
 
             elif operation == "review":
                 _run_review()
@@ -306,11 +323,8 @@ def _argparse_main() -> None:
     # preprocess
     sub.add_parser("preprocess", help="Strip HTML, deduplicate, encapsulate")
 
-    # enrich
-    sub.add_parser("enrich", help="Extract entities and map TTPs")
-
-    # report
-    sub.add_parser("report", help="Generate LLM analyst reports")
+    # enrich and report
+    sub.add_parser("report", help="Enrich and generate LLM analyst reports")
 
     # review
     sub.add_parser("review", help="Human-in-the-loop review gate")
@@ -350,13 +364,11 @@ def _argparse_main() -> None:
     elif args.command == "preprocess":
         run_preprocess()
 
-    elif args.command == "enrich":
-        run_enrich()
 
     elif args.command == "report":
         run_report()
 
-    elif args.command == "review":
+    elif args.command == "enrichment_report":
         _run_review()
 
     elif args.command == "run-all-date":
@@ -382,7 +394,9 @@ def _argparse_main() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Ensure DB is initialized before any operations (interactive or argparse)
     init_db()
+    print_status(f"Database initialized at {DB_PATH}", "info")
     # No CLI args → interactive session.  Any arg → argparse path.
     if len(sys.argv) == 1:
         run_interactive_session()

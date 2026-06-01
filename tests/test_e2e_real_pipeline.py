@@ -184,7 +184,7 @@ class TestE2ERealPipeline(unittest.TestCase):
 
         # Step 2 — Language detection + translation
         translator = LanguageDetector()
-        item = translator.process_record(item)
+        item = translator.process_record(item) 
         print(f"[+] Language processed. Description preview: "
               f"'{item['description']}...'")
 

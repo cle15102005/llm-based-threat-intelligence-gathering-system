@@ -12,6 +12,12 @@ INSERT_RAW_ITEM = """
     (source, title, description, source_url, published_date, collected_at, raw, dedup_key) 
     VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 """
+STORE_PROCESSED_ITEM_DESCRIPTION = """
+    UPDATE raw_items
+    SET description = ?
+    WHERE id = ?;
+"""
+
 GET_POST_DATE = """
     SELECT published_date FROM raw_items
     WHERE id = ?;"""

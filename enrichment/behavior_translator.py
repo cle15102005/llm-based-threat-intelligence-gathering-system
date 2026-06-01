@@ -25,7 +25,7 @@ CRITICAL RULES:
    - "Attacker moved laterally using Pass-the-Hash with compromised NTLM credentials"
    - "Adversary established persistence by installing a malicious scheduled task"
    - "Attacker disabled security tools by modifying registry keys to evade detection"
-2. Each sentence describes ONE specific adversarial action — do not combine multiple techniques.
+2. Extract AS MANY distinct adversarial behaviors as possible. Each sentence describes ONE specific adversarial action — do not combine multiple techniques.
 3. Strip all incident-specific details (company names, country names, dates, victim names).
    Focus on WHAT was done, not WHERE or WHEN.
 4. Only include sentences that describe an adversary's action, not news narrative or context.

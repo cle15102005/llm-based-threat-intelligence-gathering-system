@@ -13,16 +13,13 @@ import datetime
 import os
 from pathlib import Path
 
-from cli.formatter import (print_header, print_item_summary, print_entities,
-                            print_ttps, print_report, print_status,
+from cli.formatter import (print_header, print_report, print_status,
                             GREEN, RED, YELLOW, CYAN, BOLD, RESET)
-from db.queries import (get_pending_reports, get_entities_for_source,
-                        get_ttps_for_source, update_report_status)
 
 REPORTS_DIR = Path("reports")
 
 
-def _save_report_txt(report: dict, entities: list, ttps: list) -> Path:
+def _save_report_txt(report: dict) -> Path:
     """Write the approved report to a timestamped .txt file."""
     REPORTS_DIR.mkdir(exist_ok=True)
     ts    = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -33,24 +30,15 @@ def _save_report_txt(report: dict, entities: list, ttps: list) -> Path:
         f.write(f"Generated : {report['created_at']}\n")
         f.write(f"Approved  : {datetime.datetime.now().isoformat()}\n")
         f.write(f"Source ID : {report['source_id']}\n")
-        f.write(f"Title     : {report['title']}\n")
-        f.write(f"Source    : {report['source']}\n\n")
 
-        f.write("── ENTITIES ──────────────────────────────────\n")
-        for e in entities:
-            f.write(f"  {e['entity_type']:<16} {e['entity_value']}\n")
-
-        f.write("\n── MITRE ATT&CK TTPs ─────────────────────────\n")
-        for t in ttps:
-            f.write(f"  {t['ttp_id']:<12} {t['technique_name']}\n")
-
-        f.write("\n── ANALYST SUMMARY ───────────────────────────\n")
-        f.write(report['summary'] + "\n")
+        f.write("── REPORT DETAILS ─────────────────────────────\n")
+        f.write(report['summary'])
 
     return fname
 
 
 def run_review_gate() -> None:
+    from db.sqlite_manager import (get_pending_reports, update_report_status, delete_report)
     pending = get_pending_reports()
 
     if not pending:
@@ -63,31 +51,26 @@ def run_review_gate() -> None:
 
     for report in pending:
         source_id = report['source_id']
-        entities  = get_entities_for_source(source_id)
-        ttps      = get_ttps_for_source(source_id)
 
-        print_item_summary(report)
-        print_entities(entities)
-        print_ttps(ttps)
         print_report(report['summary'])
 
         while True:
             choice = input(
-                f"  {BOLD}Decision [{GREEN}approve{RESET}{BOLD}/"
+                f"{BOLD}Decision [{GREEN}approve{RESET}{BOLD}/"
                 f"{RED}reject{RESET}{BOLD}/"
                 f"{CYAN}reprocess{RESET}{BOLD}/"
                 f"{YELLOW}skip{RESET}{BOLD}]: {RESET}"
             ).strip().lower()
 
             if choice in ("approve", "a"):
-                path = _save_report_txt(report, entities, ttps)
-                update_report_status(source_id, "approved")
+                path = _save_report_txt(report)
+                update_report_status(report['id'], "approved")
                 print_status(f"Approved. Saved → {path}", "ok")
                 approved += 1
                 break
 
             elif choice in ("reject", "r"):
-                update_report_status(source_id, "rejected")
+                update_report_status(report['id'], "rejected")
                 print_status("Marked as rejected in DB.", "warn")
                 rejected += 1
                 break
@@ -100,6 +83,7 @@ def run_review_gate() -> None:
                         f"Re-running enrichment for source_id={source_id} …",
                         "info",
                     )
+                    delete_report(report['id'])  # delete old report
                     reprocess_item(source_id)
                     print_status(
                         "Reprocessing complete. "

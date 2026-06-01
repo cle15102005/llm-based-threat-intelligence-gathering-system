@@ -12,7 +12,8 @@ from db.queries import (
     INSERT_ENTITY, 
     INSERT_REPORT,
     GET_ENTITIES_BY_SOURCE,
-    GET_REPORT
+    GET_REPORT,
+    STORE_PROCESSED_ITEM_DESCRIPTION
 )
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 @contextmanager
 def get_db_connection():
     """Provides a safe connection context for SQLite, yielding dictionary-like rows."""
+    
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -60,6 +62,11 @@ def insert_raw_item(data: tuple) -> int:
         )
         row = cursor2.fetchone()
         return row["id"] if row else 0
+
+def store_processed_description(item_id: int, description: str):
+    """Updates the description field of a raw item after HTML stripping and translation."""
+    with get_db_connection() as conn:
+        conn.execute(STORE_PROCESSED_ITEM_DESCRIPTION, (description, item_id))
     
 def get_post_date(item_id: int) -> str:
     """Fetches the published date of a raw item by its ID."""
@@ -80,6 +87,20 @@ def get_unprocessed_batch(limit: int = 10) -> list:
     with get_db_connection() as conn:
         cursor = conn.execute(GET_UNPROCESSED_BATCH, (limit,))
         return [dict(row) for row in cursor.fetchall()]
+
+def count_unprocessed_items() -> int:
+    """Counts the number of unprocessed items in the database."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM raw_items WHERE processed = 0")
+        row = cursor.fetchone()
+        return row["count"] if row else 0
+    
+def count_preprocessed_unenriched_items() -> int:
+    """Counts the number of items that have been preprocessed but not yet enriched/reported."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM raw_items LEFT JOIN reports ON raw_items.id = reports.source_id WHERE raw_items.processed = 1 AND reports.id IS NULL")
+        row = cursor.fetchone()
+        return row["count"] if row else 0
 
 def mark_processed(item_id: int):
     """Flags a raw item as securely sanitized and ready for enrichment."""
@@ -114,7 +135,22 @@ def get_report(source_id: int) -> dict:
         row = cursor.fetchone()
         return dict(row) if row else None
     
+def get_pending_reports() -> list:
+    """Fetches all reports that are pending human review."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT * FROM reports WHERE status = 'pending'")
+        return [dict(row) for row in cursor.fetchall()]
+    
+def update_report_status(report_id: int, new_status: str):
+    """Updates the status of a specific report."""
+    with get_db_connection() as conn:
+        conn.execute("UPDATE reports SET status = ? WHERE id = ?", (new_status, report_id))
+
+def delete_report(report_id: int):
+    """Deletes a report from the database, used for cleanup after reprocessing."""
+    with get_db_connection() as conn:
+        conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+
 if __name__ == "__main__":
-    """Initializes the database when this module is run directly."""
-    remark_processed(5)
-    print("Processed status reset for item ID 4.")  # Example: reset processed status for item ID 4 for testing
+    remark_processed(3)
+    delete_report(3)
