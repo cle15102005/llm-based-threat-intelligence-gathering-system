@@ -86,7 +86,7 @@ Zero-Day Flag        : {is_zero_day}
 ## Threat Overview
 First write the source URL and post date:
 Source URL: {source_url} | Post Date: {post_date}
-Then, analyze the text and summarize it HIGHLY DETAILED based on its type:
+Then, analyze the text and summarize it HIGHLY DETAILED based on its type, keep the length of the summary STRICTLY IN RANGE of 500-1500 words:
 - IF ACTIVE ATTACK: Detail exactly what the threat is, the Threat Actor behind it, and step-by-step how the attack operates technically.
 - IF UPDATE/PATCH/ADVISORY: Detail the specific software affected, the vulnerability mechanics, and the provided fix. 
 - IF NOISE/ADVERTISEMENT: Write exactly: "This data is non-actionable noise or a commercial advertisement."
@@ -171,15 +171,16 @@ Target Software : {target_software}
 
 VERIFICATION RULES:
 1. Cross-check EVERY entity against the threat data above.
-2. REMOVE entities that are NOT actually mentioned in the threat data.
-3. REMOVE entities that are wrongly classified (e.g. a target system listed as a threat actor).
-4. ADD any threat actors, malware, hard IOCs, or target systems that ARE mentioned in the 
+2. KEEP entities that are  hashes like MD5, SHA1, SHA256.
+3. REMOVE entities that are NOT actually mentioned in the threat data.
+4. REMOVE entities that are wrongly classified (e.g. a target system listed as a threat actor).
+5. ADD any threat actors, malware, hard IOCs, or target systems that ARE mentioned in the 
    threat data but are MISSING from the extracted lists. CONSIDER CONTEXT to determine if something is ACTUALLY a threat actor, malware, IOC, or target system.
-5. Hard IOCs format: "TYPE: value" (e.g. "CVE: CVE-20xx-abcd", "IPv4: a.b.c.d", "DOMAIN: example.com")
-6. Target Software: systems/software explicitly mentioned as BEING ATTACKED or VULNERABLE.
-7. Do NOT invent entities not present in the threat data.
-8. Output ONLY a SINGLE valid JSON object — no preamble, no explanation, no markdown, no notes after the closing brace.
-9. If a category is empty, output an empty list [] for that key — never omit a key.
+6. Hard IOCs format: "TYPE: value" (e.g. "CVE: CVE-20xx-abcd", "IPv4: a.b.c.d", "DOMAIN: example.com")
+7. Target Software: systems/software explicitly mentioned as BEING ATTACKED or VULNERABLE.
+8. Do NOT invent entities not present in the threat data.
+9. Output ONLY a SINGLE valid JSON object — no preamble, no explanation, no markdown, no notes after the closing brace.
+10. If a category is empty, output an empty list [] for that key — never omit a key.
 
 JSON Schema (output EXACTLY this structure, nothing else):
 {{"threat_actors": ["name1"], "malware": ["name1"], "hard_iocs": ["TYPE: value"], "target_software": ["name1"]}}

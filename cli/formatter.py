@@ -44,11 +44,28 @@ def print_ttps(ttps: list[dict]):
     print()
 
 def print_report(summary: str):
-    print(f"{BOLD}{GREEN}  ── Generated Report ────────────────────────{RESET}")
-    # Word-wrap at 70 chars
     import textwrap
-    for line in textwrap.wrap(summary, width=70):
-        print(f"  {line}")
+    print(f"{BOLD}{GREEN}  ── Generated Report ────────────────────────{RESET}")
+    print()
+    for line in summary.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            print()
+        elif stripped.startswith("## "):
+            # Section header
+            title = stripped[3:]
+            print(f"  {BOLD}{CYAN}{title}{RESET}")
+            print(f"  {CYAN}{'─' * len(title)}{RESET}")
+        elif stripped.startswith("**") and stripped.endswith("**"):
+            # Bold label line
+            print(f"  {BOLD}{stripped.strip('*')}{RESET}")
+        elif stripped.startswith("•") or stripped.startswith("-"):
+            # Bullet point
+            print(f"  {YELLOW}{stripped}{RESET}")
+        else:
+            # Normal text — wrap at 70 chars
+            for wrapped in textwrap.wrap(stripped, width=70):
+                print(f"  {wrapped}")
     print()
 
 def print_status(message: str, level: str = "info"):

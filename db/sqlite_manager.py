@@ -135,3 +135,22 @@ def get_report(source_id: int) -> dict:
         row = cursor.fetchone()
         return dict(row) if row else None
     
+def get_pending_reports() -> list:
+    """Fetches all reports that are pending human review."""
+    with get_db_connection() as conn:
+        cursor = conn.execute("SELECT * FROM reports WHERE status = 'pending'")
+        return [dict(row) for row in cursor.fetchall()]
+    
+def update_report_status(report_id: int, new_status: str):
+    """Updates the status of a specific report."""
+    with get_db_connection() as conn:
+        conn.execute("UPDATE reports SET status = ? WHERE id = ?", (new_status, report_id))
+
+def delete_report(report_id: int):
+    """Deletes a report from the database, used for cleanup after reprocessing."""
+    with get_db_connection() as conn:
+        conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+
+if __name__ == "__main__":
+    remark_processed(3)
+    delete_report(3)

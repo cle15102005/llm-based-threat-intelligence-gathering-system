@@ -91,6 +91,7 @@ class LanguageDetector:
             if result.lower().startswith("english translation:"):
                 result = result[20:].strip()
 
+            print(f"    [*] Translation result: {result}")  # Print full translation result for debugging
             return result
 
         except Exception as e:
